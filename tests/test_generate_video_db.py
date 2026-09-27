@@ -11,7 +11,7 @@ def _make_video(tmp_path, channel_dir: str, metadata: dict):
     """Helper: create vault/content/<channel>/raw/metadata.json"""
     raw = tmp_path / channel_dir / "raw"
     raw.mkdir(parents=True)
-    with open(raw / "metadata.json", "w", encoding="utf-8") as f:
+    with open(raw / f"metadata_{metadata['id']}.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f)
 
 
