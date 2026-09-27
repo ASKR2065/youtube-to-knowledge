@@ -1,19 +1,19 @@
 # youtube-to-knowledge
 
-Turn any YouTube video into a transcript, summary, and knowledge graph — powered by Claude Code.
+Turn any YouTube video into a transcript, summary, and knowledge graph — powered by the Mistral AI API.
 
 Paste a link. Get structured knowledge.
 
 ## How it works
 
 1. Fetches the transcript (YouTube API or local Whisper)
-2. Generates a structured summary in the video's language
-3. Extracts entities and relationships → builds an interactive knowledge graph
+2. Generates a structured summary in the video's language (Mistral AI)
+3. Extracts entities and relationships → builds an interactive knowledge graph (Mistral AI)
 
 ## Requirements
 
 - Python 3.10+
-- [Claude Code](https://claude.ai/code)
+- A [Mistral AI API key](https://console.mistral.ai/) (free tier available)
 - ffmpeg (required for Whisper mode)
 
 ### Install ffmpeg
@@ -28,37 +28,91 @@ Paste a link. Get structured knowledge.
 ## Setup
 
 ```bash
-git clone https://github.com/velmighty/youtube-to-knowledge
+git clone https://github.com/ASKR2065/youtube-to-knowledge
 cd youtube-to-knowledge
 pip install -r requirements.txt
 ```
 
-Open the folder in Claude Code.
+Create your `.env` file with your Mistral API key:
+
+```bash
+cp .env.example .env
+# then edit .env and paste your key
+```
+
+Alternatively, export the key in your shell:
+
+```bash
+export MISTRAL_API_KEY="your_key_here"
+```
 
 ## Usage
 
-```
-/process https://www.youtube.com/watch?v=VIDEO_ID
+Process one video end-to-end (transcript → summary → knowledge graph):
+
+```bash
+python src/process.py https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
-Process multiple videos at once:
+Multiple videos at once:
 
-```
-/process https://youtube.com/watch?v=abc https://youtube.com/watch?v=def
+```bash
+python src/process.py https://youtube.com/watch?v=abc https://youtube.com/watch?v=def
 ```
 
-Process an entire playlist:
+An entire playlist:
 
-```
-/process https://www.youtube.com/playlist?list=PLxxx
+```bash
+python src/process.py https://www.youtube.com/playlist?list=PLxxx
 ```
 
 Already-processed videos are skipped automatically.
 
-Additional commands:
+### Options
 
-- `/video_specialist` — deep-dive questions about what was said in a processed video
-- `/kg_navigator` — explore entity connections across videos
+```
+python src/process.py [--depth light|standard|deep] [--engine whisperx|whisper] [--obsidian] <URL> [<URL2> ...]
+```
+
+| Flag | Values | Default | Effect |
+|------|--------|---------|--------|
+| `--depth` | `light`, `standard`, `deep` | `standard` | Controls triplet count and summary detail |
+| `--engine` | `whisper`, `whisperx` | `whisper` | Selects transcription engine for fallback |
+| `--obsidian` | — | off | Exports entity notes to `obsidian/` subfolder |
+
+Examples:
+
+```bash
+python src/process.py --depth deep https://www.youtube.com/watch?v=VIDEO_ID
+python src/process.py --engine whisperx --depth light https://www.youtube.com/watch?v=VIDEO_ID
+python src/process.py --obsidian https://www.youtube.com/watch?v=VIDEO_ID
+```
+
+### Ask questions about a processed video
+
+```bash
+python src/ask.py <video_id_or_channel> "What did the speaker say about pricing?"
+```
+
+### Run the LLM steps individually
+
+Summary only:
+
+```bash
+python src/summarize.py vault/content/<channel>/raw/transcript_<video_id>.txt \
+  --title "Video title" --channel "Channel" --language en --depth standard \
+  --output vault/content/<channel>/summary_<video_id>.md
+```
+
+Triplet extraction only:
+
+```bash
+python src/extract_triplets.py vault/content/<channel>/raw/transcript_<video_id>.txt \
+  --channel "Channel" --depth standard \
+  --graph vault/content/<channel>/graph.json \
+  --output vault/content/<channel>/triplets_<video_id>.json
+python src/graph_extractor.py vault/content/<channel> vault/content/<channel>/triplets_<video_id>.json
+```
 
 ## Output
 
@@ -84,11 +138,7 @@ Each file is named after the video ID, so multiple videos from the same channel 
 | Whisper (local) | Minutes | Any video, no subtitles needed |
 | WhisperX (opt-in) | Minutes | `pip install -r requirements-whisperx.txt` |
 
-The `/process` command tries fast mode first and falls back to Whisper automatically. To force Whisper:
-
-```bash
-python src/transcribe_whisper.py https://www.youtube.com/watch?v=VIDEO_ID
-```
+`process.py` tries fast mode first and falls back to Whisper automatically.
 
 ### WhisperX mode
 
@@ -100,8 +150,8 @@ pip install -r requirements-whisperx.txt
 
 Then use the `--engine` flag:
 
-```
-/process --engine whisperx https://www.youtube.com/watch?v=VIDEO_ID
+```bash
+python src/process.py --engine whisperx https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
 Speaker diarization requires a [HuggingFace token](https://huggingface.co/settings/tokens) set as `HF_TOKEN` in your environment. Without it, WhisperX still produces timestamped segments but without speaker labels.
@@ -110,8 +160,8 @@ Speaker diarization requires a [HuggingFace token](https://huggingface.co/settin
 
 Add `--obsidian` to export the knowledge graph directly into your Obsidian vault.
 
-```
-/process --obsidian https://www.youtube.com/watch?v=VIDEO_ID
+```bash
+python src/process.py --obsidian https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
 This generates one `.md` file per extracted entity in `vault/content/<channel_name>/obsidian/`. Each file contains:
@@ -131,30 +181,12 @@ python src/obsidian_exporter.py vault/content/<channel>/triplets_<video_id>.json
   --metadata vault/content/<channel>/raw/metadata_<video_id>.json
 ```
 
-## Options
+## Model configuration
 
-```
-/process [--depth light|standard|deep] [--engine whisperx|whisper] [--obsidian] <URL> [<URL2> ...]
-```
+By default the pipeline uses `mistral-large-latest`. Change it via `.env` or environment:
 
-| Flag | Values | Default | Effect |
-|------|--------|---------|--------|
-| `--depth` | `light`, `standard`, `deep` | `standard` | Controls triplet count and summary detail |
-| `--engine` | `whisper`, `whisperx` | `whisper` | Selects transcription engine for fallback |
-| `--obsidian` | — | off | Exports entity notes to `obsidian/` subfolder |
-
-Flags apply to all videos in a batch.
-
-Examples:
-
-```
-/process https://www.youtube.com/watch?v=VIDEO_ID
-/process https://youtube.com/watch?v=abc https://youtube.com/watch?v=def
-/process https://www.youtube.com/playlist?list=PLxxx
-/process --depth deep https://www.youtube.com/watch?v=VIDEO_ID
-/process --engine whisperx --depth light https://www.youtube.com/watch?v=VIDEO_ID
-/process --obsidian https://www.youtube.com/watch?v=VIDEO_ID
-/process --obsidian --depth deep https://www.youtube.com/watch?v=VIDEO_ID
+```bash
+export MISTRAL_MODEL="mistral-small-latest"
 ```
 
 ## License
